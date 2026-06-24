@@ -29,11 +29,13 @@ export async function ensureFaceLandmarker() {
   return faceLandmarker;
 }
 
-export async function detectFaceLandmarks() {
-  // FaceMesh is ALWAYS applied to the ORIGINAL full-resolution image (state.uploadedImage),
-  // never to the scaled/centered version on the canvas or any traced/raster version.
-  // This preserves maximum quality for landmark detection (especially ears and hairline).
-  const original = state.uploadedImage;
+export async function detectFaceLandmarks(imageSource) {
+  // Prefer an explicitly passed imageSource (supports reuse + unit testing without
+  // mutating global state). Falls back to state.uploadedImage for normal app usage.
+  // In the app, the caller relies on the fallback so that detection always runs on
+  // the ORIGINAL full-resolution image (never the scaled/centered canvas version)
+  // for maximum quality on outer features (ears, hairline, etc).
+  const original = imageSource || state.uploadedImage;
   if (!original) {
     throw new Error('No original image available for FaceMesh detection.');
   }
@@ -71,8 +73,8 @@ export function drawFaceLines(ctx, landmarks, size) {
   const featureIndices = {
     faceOval: [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10],
     hairline: [162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389],
-    left_ear: [234, 227, 116, 117, 118, 119, 120, 121, 128, 245, 234],
-    right_ear: [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 454],
+    leftEar: [234, 227, 116, 117, 118, 119, 120, 121, 128, 245, 234],
+    rightEar: [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 454],
     rightEye: [33,7,163,144,145,153,154,155,133,33],
     leftEye: [263,249,390,373,374,380,381,382,362,263],
     rightEyebrow: [46,53,52,65,55,70,63,105,66,107],
@@ -91,7 +93,7 @@ export function drawFaceLines(ctx, landmarks, size) {
     if (pts.length < 2) continue;
 
     // Make hairline and ears more prominent
-    if (name === 'hairline' || name.includes('ear')) {
+    if (name === 'hairline' || name.includes('Ear')) {
       ctx.lineWidth = 6;
     } else {
       ctx.lineWidth = 4.5;
@@ -107,7 +109,7 @@ export function drawFaceLines(ctx, landmarks, size) {
 }
 
 export async function processWithFaceMesh() {
-  // Note: This helper still uses the original image for detection.
+  // Note: This helper (and detectFaceLandmarks) use the original via state fallback.
   // However, the main FaceMesh checkbox path (in tracer.js) bypasses this entirely
   // and goes direct from original landmarks → Vector SVG (no raster / ImageTracer).
   const landmarks = await detectFaceLandmarks();
@@ -130,8 +132,8 @@ export function buildFacePathsFromLandmarks(landmarks, size = CANVAS_SIZE) {
   const featureIndices = {
     faceOval: [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10],
     hairline: [162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389],
-    left_ear: [234, 227, 116, 117, 118, 119, 120, 121, 128, 245, 234],
-    right_ear: [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 454],
+    leftEar: [234, 227, 116, 117, 118, 119, 120, 121, 128, 245, 234],
+    rightEar: [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 454],
     rightEye: [33,7,163,144,145,153,154,155,133,33],
     leftEye: [263,249,390,373,374,380,381,382,362,263],
     rightEyebrow: [46,53,52,65,55,70,63,105,66,107],
@@ -174,4 +176,27 @@ export function pathsToSVG(paths) {
   });
   svg += `</svg>`;
   return svg;
+}
+
+export async function updateFaceMeshRawBox() {
+  if (!dom.faceMeshContainer || !state.uploadedImage) {
+    if (dom.faceMeshContainer) dom.faceMeshContainer.innerHTML = '';
+    return;
+  }
+
+  const isEnabled = dom.useFaceMesh && dom.useFaceMesh.checked;
+  if (!isEnabled) {
+    dom.faceMeshContainer.innerHTML = '';
+    return;
+  }
+
+  try {
+    const landmarks = await detectFaceLandmarks();
+    const facePaths = buildFacePathsFromLandmarks(landmarks);
+    // Show the direct FaceMesh result with no additional normalization/post-processing
+    dom.faceMeshContainer.innerHTML = pathsToSVG(facePaths);
+  } catch (err) {
+    console.warn('FaceMesh raw box update failed:', err);
+    dom.faceMeshContainer.innerHTML = '';
+  }
 }

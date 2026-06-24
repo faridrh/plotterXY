@@ -138,6 +138,8 @@ export function initTuningParams() {
   if (dom.useFaceMesh) {
     dom.useFaceMesh.addEventListener('change', () => {
       if (state.uploadedImage) {
+        // Update the raw FaceMesh box immediately (and trigger full trace for other views)
+        import('./faceMesh.js').then(m => m.updateFaceMeshRawBox()).catch(console.error);
         performTraceSafe();
       }
     });

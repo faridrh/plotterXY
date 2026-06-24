@@ -29,7 +29,7 @@ export async function performTrace() {
   if (!state.uploadedImage) return;
 
   // Clear FaceMesh box by default; will be set only if FaceMesh is active
-  // Clear dedicated FaceMesh box at start of each trace
+  // Clear dedicated FaceMesh box at start of each trace (will be re-populated by update if enabled)
   if (dom.faceMeshContainer) {
     dom.faceMeshContainer.innerHTML = '';
   }
@@ -51,11 +51,9 @@ export async function performTrace() {
 
       // Pure FaceMesh output (direct from original image, no tracing at all) 
       // goes to the dedicated "FaceMesh (raw)" box
-      if (dom.faceMeshContainer) {
-        dom.faceMeshContainer.innerHTML = pathsToSVG(facePaths);
-      }
+      import('./faceMesh.js').then(m => m.updateFaceMeshRawBox()).catch(console.error);
 
-      // Vector also gets the raw FaceMesh for now
+      // Vector also gets the raw FaceMesh (for now; can be changed to traced version of FaceMesh lines)
       dom.svgContainer.innerHTML = pathsToSVG(facePaths);
 
       state.pathsPoints = facePaths;

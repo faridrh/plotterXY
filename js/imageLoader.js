@@ -28,7 +28,10 @@ export const ImageLoader = {
       dom.traceBtn.disabled = false;
       if (dom.saveToLibraryBtn) dom.saveToLibraryBtn.disabled = false;
 
-      // Auto-trace using dynamic import to avoid tight coupling
+      // Update raw FaceMesh box if enabled, then auto-trace
+      if (dom.useFaceMesh && dom.useFaceMesh.checked) {
+        import('./faceMesh.js').then(m => m.updateFaceMeshRawBox()).catch(console.error);
+      }
       import('./tracer.js').then(m => m.performTraceSafe()).catch(console.error);
     };
     img.src = URL.createObjectURL(file);
@@ -44,6 +47,9 @@ export const ImageLoader = {
       dom.traceBtn.disabled = false;
       if (dom.saveToLibraryBtn) dom.saveToLibraryBtn.disabled = true;
 
+      if (dom.useFaceMesh && dom.useFaceMesh.checked) {
+        import('./faceMesh.js').then(m => m.updateFaceMeshRawBox()).catch(console.error);
+      }
       import('./tracer.js').then(m => m.performTraceSafe()).catch(console.error);
     };
     img.onerror = () => {

@@ -59,7 +59,7 @@ The app is loaded via ES Modules from `index.html`:
 - **faceMesh.js**  
   MediaPipe FaceLandmarker integration (lazy-loaded).
   - `ensureFaceLandmarker()` — dynamically loads the CDN script + model on first use.
-  - `detectFaceLandmarks()`
+  - `detectFaceLandmarks(imageSource?)` — detects landmarks. If imageSource is provided it is used; otherwise falls back to `state.uploadedImage`. App code relies on the fallback so detection uses the full-resolution original.
   - `drawFaceLines()` — draws clean black face contours (oval, eyes, brows, lips, nose) on a white canvas.
   - `processWithFaceMesh()` — produces a data URL of the clean line drawing used as input to the tracer when the checkbox is enabled.
 
