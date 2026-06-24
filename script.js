@@ -3,6 +3,9 @@ const traceBtn = document.getElementById('traceBtn');
 const playBtn = document.getElementById('playBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const speedRange = document.getElementById('speedRange');
+const exportGcodeBtn = document.getElementById('exportGcodeBtn');
+const exportJsonBtn = document.getElementById('exportJsonBtn');
+const progressText = document.getElementById('progressText');
 
 const inputCanvas = document.getElementById('inputCanvas');
 const inputCtx = inputCanvas.getContext('2d');
@@ -70,6 +73,8 @@ traceBtn.addEventListener('click', () => {
       resetSimulation();
       playBtn.disabled = false;
       pauseBtn.disabled = false;
+      exportGcodeBtn.disabled = false;
+      exportJsonBtn.disabled = false;
     },
     options
   );
@@ -213,6 +218,30 @@ function resetSimulation() {
   plotterCtx.strokeStyle = '#00ff88';
   plotterCtx.lineCap = 'round';
   plotterCtx.lineJoin = 'round';
+
+  updateProgress();
+}
+
+function updateProgress() {
+  if (!pathsPoints.length) {
+    progressText.textContent = 'Progress: 0%';
+    return;
+  }
+
+  let totalPoints = 0;
+  let completedPoints = 0;
+
+  for (let i = 0; i < pathsPoints.length; i++) {
+    totalPoints += pathsPoints[i].length;
+    if (i < currentPathIndex) {
+      completedPoints += pathsPoints[i].length;
+    } else if (i === currentPathIndex) {
+      completedPoints += currentPointIndex;
+    }
+  }
+
+  const percent = totalPoints > 0 ? Math.floor((completedPoints / totalPoints) * 100) : 0;
+  progressText.textContent = `Progress: ${percent}%`;
 }
 
 function stepSimulation() {
@@ -244,6 +273,7 @@ function stepSimulation() {
     }
   }
 
+  updateProgress();
   animReq = requestAnimationFrame(stepSimulation);
 }
 
@@ -262,6 +292,95 @@ pauseBtn.addEventListener('click', () => {
 
 speedRange.addEventListener('input', () => {
   speed = parseFloat(speedRange.value);
+});
+
+// -----------------------------
+// 5. Export Functions (G-code + JSON)
+// -----------------------------
+function generateGcode(paths) {
+  let gcode = [];
+  gcode.push('; XY Plotter G-code Export');
+  gcode.push('; Generated from SVG trace');
+  gcode.push('G21 ; Set units to mm');
+  gcode.push('G90 ; Absolute positioning');
+  gcode.push('G28 ; Home all axes');
+  gcode.push('');
+
+  const scale = 0.2;      // pixel to mm scaling
+  const penUpZ = 5;
+  const penDownZ = 0;
+
+  paths.forEach((path, idx) => {
+    if (path.length === 0) return;
+
+    // Pen up, move to start
+    const start = path[0];
+    gcode.push(`G0 Z${penUpZ} ; Pen up`);
+    gcode.push(`G0 X${(start.x * scale).toFixed(2)} Y${(start.y * scale).toFixed(2)} ; Move to start`);
+    gcode.push(`G0 Z${penDownZ} ; Pen down`);
+
+    // Draw the path
+    for (let i = 1; i < path.length; i++) {
+      const p = path[i];
+      gcode.push(`G1 X${(p.x * scale).toFixed(2)} Y${(p.y * scale).toFixed(2)} F800`);
+    }
+  });
+
+  gcode.push('G0 Z' + penUpZ + ' ; Pen up at end');
+  gcode.push('G28 ; Return home');
+  gcode.push('M30 ; End program');
+
+  return gcode.join('\n');
+}
+
+function generateJson(paths) {
+  const commands = [];
+  const scale = 0.2;
+
+  paths.forEach(path => {
+    if (path.length === 0) return;
+
+    commands.push({ cmd: 'pen_up' });
+    commands.push({
+      cmd: 'move',
+      x: parseFloat((path[0].x * scale).toFixed(2)),
+      y: parseFloat((path[0].y * scale).toFixed(2))
+    });
+    commands.push({ cmd: 'pen_down' });
+
+    for (let i = 1; i < path.length; i++) {
+      commands.push({
+        cmd: 'line',
+        x: parseFloat((path[i].x * scale).toFixed(2)),
+        y: parseFloat((path[i].y * scale).toFixed(2))
+      });
+    }
+  });
+
+  commands.push({ cmd: 'pen_up' });
+  return JSON.stringify(commands, null, 2);
+}
+
+function downloadFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+exportGcodeBtn.addEventListener('click', () => {
+  if (!pathsPoints.length) return;
+  const gcode = generateGcode(pathsPoints);
+  downloadFile(gcode, 'plotter_output.gcode', 'text/plain');
+});
+
+exportJsonBtn.addEventListener('click', () => {
+  if (!pathsPoints.length) return;
+  const json = generateJson(pathsPoints);
+  downloadFile(json, 'plotter_output.json', 'application/json');
 });
 
 speed = parseFloat(speedRange.value);
