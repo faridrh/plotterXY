@@ -1,6 +1,7 @@
 // js/faceMesh.js
 import { CANVAS_SIZE } from './config.js';
 import { dom } from './dom.js';
+import { state } from './state.js';
 
 let faceLandmarker = null;
 
@@ -29,25 +30,49 @@ export async function ensureFaceLandmarker() {
 }
 
 export async function detectFaceLandmarks(imageSource) {
+  // Always detect on the original high-res image for better accuracy on outer features (ears, hairline)
+  // Then map to the same coordinate space as the centered canvas drawing.
+  const original = state.uploadedImage;
+  if (!original) {
+    throw new Error('No original image available for FaceMesh detection.');
+  }
+
   const landmarker = await ensureFaceLandmarker();
-  const results = landmarker.detect(imageSource);
+  const results = landmarker.detect(original);
   if (!results.faceLandmarks || results.faceLandmarks.length === 0) {
     throw new Error('No face detected. Try a clearer front-facing selfie.');
   }
-  return results.faceLandmarks[0];
+
+  const rawLms = results.faceLandmarks[0];
+
+  // Compute the exact same transform as drawCentered in imageLoader
+  const scale = Math.min(CANVAS_SIZE / original.width, CANVAS_SIZE / original.height);
+  const w = original.width * scale;
+  const h = original.height * scale;
+  const offX = (CANVAS_SIZE - w) / 2;
+  const offY = (CANVAS_SIZE - h) / 2;
+
+  // Return landmarks normalized to [0,1] relative to the 300x300 canvas
+  // (so existing * size logic in draw/build continues to work)
+  return rawLms.map(lm => ({
+    x: (offX + lm.x * w) / CANVAS_SIZE,
+    y: (offY + lm.y * h) / CANVAS_SIZE
+  }));
 }
 
 export function drawFaceLines(ctx, landmarks, size) {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, size, size);
   ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 4.5;  // thicker lines so the clean face contours survive ImageTracer + post-processing
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
   // Use the same feature groups for nice continuous strokes
   const featureIndices = {
     faceOval: [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10],
+    hairline: [162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389],
+    left_ear: [234, 227, 116, 117, 118, 119, 120, 121, 128, 245, 234],
+    right_ear: [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 454],
     rightEye: [33,7,163,144,145,153,154,155,133,33],
     leftEye: [263,249,390,373,374,380,381,382,362,263],
     rightEyebrow: [46,53,52,65,55,70,63,105,66,107],
@@ -57,13 +82,20 @@ export function drawFaceLines(ctx, landmarks, size) {
     noseBase: [4,275,274,455,308]
   };
 
-  for (const indices of Object.values(featureIndices)) {
+  for (const [name, indices] of Object.entries(featureIndices)) {
     const pts = indices.map(i => {
       const lm = landmarks[i];
       return lm ? { x: lm.x * size, y: lm.y * size } : null;
     }).filter(Boolean);
 
     if (pts.length < 2) continue;
+
+    // Make hairline and ears more prominent
+    if (name === 'hairline' || name.includes('ear')) {
+      ctx.lineWidth = 6;
+    } else {
+      ctx.lineWidth = 4.5;
+    }
 
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -75,8 +107,9 @@ export function drawFaceLines(ctx, landmarks, size) {
 }
 
 export async function processWithFaceMesh() {
-  // Kept for compatibility / alternative raster preview of the lines.
-  // The main FaceMesh flow now uses direct landmark paths for accuracy (see buildFacePathsFromLandmarks).
+  // Note: detectFaceLandmarks now always runs on the *original* full-resolution image
+  // (not the scaled/centered version on the canvas) and remaps coordinates.
+  // This significantly improves accuracy for outer features like ears and hairline.
   const landmarks = await detectFaceLandmarks(dom.inputCanvas);
 
   const procCanvas = document.createElement('canvas');
@@ -96,6 +129,9 @@ export async function processWithFaceMesh() {
 export function buildFacePathsFromLandmarks(landmarks, size = CANVAS_SIZE) {
   const featureIndices = {
     faceOval: [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10],
+    hairline: [162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389],
+    left_ear: [234, 227, 116, 117, 118, 119, 120, 121, 128, 245, 234],
+    right_ear: [454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 454],
     rightEye: [33,7,163,144,145,153,154,155,133,33],
     leftEye: [263,249,390,373,374,380,381,382,362,263],
     rightEyebrow: [46,53,52,65,55,70,63,105,66,107],
@@ -124,14 +160,17 @@ export function buildFacePathsFromLandmarks(landmarks, size = CANVAS_SIZE) {
  */
 export function pathsToSVG(paths) {
   const size = CANVAS_SIZE;
+  // widths to highlight hairline and ears
+  const widths = [1.5, 3, 3, 3, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5];
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
-  paths.forEach(path => {
+  paths.forEach((path, idx) => {
     if (path.length < 2) return;
+    const w = widths[idx] || 1.5;
     let d = `M ${path[0].x.toFixed(1)} ${path[0].y.toFixed(1)}`;
     for (let i = 1; i < path.length; i++) {
       d += ` L ${path[i].x.toFixed(1)} ${path[i].y.toFixed(1)}`;
     }
-    svg += `<path d="${d}" fill="none" stroke="#00ff88" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    svg += `<path d="${d}" fill="none" stroke="#00ff88" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
   });
   svg += `</svg>`;
   return svg;

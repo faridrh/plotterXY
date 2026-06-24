@@ -32,10 +32,12 @@ export async function performTrace() {
 
   if (useFaceMesh) {
     try {
+      // detectFaceLandmarks now always uses the *original* image (not the scaled inputCanvas)
+      // for much better detection of ears, hairline and other outer features.
       const landmarks = await detectFaceLandmarks(dom.inputCanvas);
 
       // Build paths DIRECTLY from landmarks (exact face features from the selfie)
-      // This ensures the lines accurately represent the uploaded face, without raster artifacts from ImageTracer.
+      // This ensures the lines accurately represent the uploaded face.
       let facePaths = buildFacePathsFromLandmarks(landmarks);
 
       // Normalize to canvas (same as other paths)
