@@ -10,7 +10,10 @@
 <h2>Face → Line Art → XY Plotter Simulation</h2>
 
 <div id="controls">
-  <input type="file" id="fileInput" accept="image/*" />
+  <div class="upload-row">
+    <input type="file" id="fileInput" accept="image/*" />
+    <button id="saveToLibraryBtn" disabled title="Download this image so you can copy it into the images/ folder">Save to images/ folder</button>
+  </div>
   <button id="traceBtn" disabled>Trace & Simulate</button>
   <button id="playBtn" disabled>Play</button>
   <button id="pauseBtn" disabled>Pause</button>
@@ -20,6 +23,12 @@
   <button id="exportGcodeBtn" disabled>Export G-code</button>
   <button id="exportJsonBtn" disabled>Export JSON</button>
   <span id="progressText">Progress: 0%</span>
+</div>
+
+<div id="imageLibrary">
+  <div class="library-label">Choose from images folder:</div>
+  <div id="libraryThumbnails" class="thumbnails"></div>
+  <div class="library-hint">Add more images by placing files in the <code>images/</code> folder and updating the list in script.js, or use "Save to images/ folder" after uploading.</div>
 </div>
 
 <div class="row">

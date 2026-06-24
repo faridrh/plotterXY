@@ -20,6 +20,12 @@ const GCODE_CONFIG = {
   feedRate: 800,
 };
 
+// Images available in the ./images/ folder
+const AVAILABLE_IMAGES = [
+  'apple_vector.jpg',
+  'man_face.jpg',
+];
+
 const dom = {
   fileInput: document.getElementById('fileInput'),
   traceBtn: document.getElementById('traceBtn'),
@@ -32,6 +38,8 @@ const dom = {
   inputCanvas: document.getElementById('inputCanvas'),
   plotterCanvas: document.getElementById('plotterCanvas'),
   svgContainer: document.getElementById('svgContainer'),
+  libraryThumbnails: document.getElementById('libraryThumbnails'),
+  saveToLibraryBtn: document.getElementById('saveToLibraryBtn'),
 };
 
 const inputCtx = dom.inputCanvas.getContext('2d');
@@ -46,6 +54,8 @@ const state = {
   currentPointIndex: 0,
   speed: 1,
   penDown: false,
+  lastUploadedFile: null,
+  sessionImages: [], // { name, url } for uploads made this session
 };
 
 const SvgParser = {
@@ -395,10 +405,28 @@ const ImageLoader = {
     const img = new Image();
     img.onload = () => {
       state.uploadedImage = img;
+      state.lastUploadedFile = file;
       this.drawCentered(img, inputCtx);
       dom.traceBtn.disabled = false;
+      if (dom.saveToLibraryBtn) dom.saveToLibraryBtn.disabled = false;
     };
     img.src = URL.createObjectURL(file);
+  },
+
+  loadFromUrl(url, displayName = null) {
+    const img = new Image();
+    img.onload = () => {
+      state.uploadedImage = img;
+      // When loading from library we don't have a File to save
+      state.lastUploadedFile = null;
+      this.drawCentered(img, inputCtx);
+      dom.traceBtn.disabled = false;
+      if (dom.saveToLibraryBtn) dom.saveToLibraryBtn.disabled = true;
+    };
+    img.onerror = () => {
+      alert('Failed to load image: ' + (displayName || url));
+    };
+    img.src = url;
   },
 };
 
@@ -406,6 +434,74 @@ function enableSimulationControls() {
   for (const button of [dom.playBtn, dom.pauseBtn, dom.exportGcodeBtn, dom.exportJsonBtn]) {
     button.disabled = false;
   }
+}
+
+function downloadFileToSave(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name || 'image.png';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function addSessionImageFromFile(file, objectUrl) {
+  // Add to session images so user can re-select it easily this session
+  state.sessionImages = state.sessionImages.filter(s => s.name !== file.name);
+  state.sessionImages.unshift({ name: file.name, url: objectUrl, file });
+  renderLibrary();
+}
+
+function renderLibrary() {
+  if (!dom.libraryThumbnails) return;
+  dom.libraryThumbnails.innerHTML = '';
+
+  // 1. Folder images
+  for (const filename of AVAILABLE_IMAGES) {
+    const thumb = createThumbnail(`images/${filename}`, filename, () => {
+      ImageLoader.loadFromUrl(`images/${filename}`, filename);
+    });
+    dom.libraryThumbnails.appendChild(thumb);
+  }
+
+  // 2. Session uploads (from this run)
+  for (const sess of state.sessionImages) {
+    const thumb = createThumbnail(sess.url, sess.name + ' (session)', () => {
+      ImageLoader.loadFromUrl(sess.url, sess.name);
+      // Restore ability to save this uploaded file
+      state.lastUploadedFile = sess.file || null;
+      if (dom.saveToLibraryBtn) {
+        dom.saveToLibraryBtn.disabled = !sess.file;
+      }
+    });
+    // Mark as session
+    thumb.style.borderColor = '#ffaa00';
+    dom.libraryThumbnails.appendChild(thumb);
+  }
+}
+
+function createThumbnail(src, label, onClick) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'thumbnail';
+
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = label;
+  img.loading = 'lazy';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'label';
+  labelEl.textContent = label;
+
+  wrapper.appendChild(img);
+  wrapper.appendChild(labelEl);
+
+  wrapper.addEventListener('click', onClick);
+
+  return wrapper;
 }
 
 function handleTrace() {
@@ -427,8 +523,24 @@ function handleTrace() {
 function init() {
   dom.fileInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
-    if (file) ImageLoader.loadFromFile(file);
+    if (!file) return;
+
+    // Create a stable object URL for the session gallery
+    const objectUrl = URL.createObjectURL(file);
+
+    ImageLoader.loadFromFile(file);
+
+    // Add/replace in session images so user can pick it again easily
+    addSessionImageFromFile(file, objectUrl);
   });
+
+  if (dom.saveToLibraryBtn) {
+    dom.saveToLibraryBtn.addEventListener('click', () => {
+      if (state.lastUploadedFile) {
+        downloadFileToSave(state.lastUploadedFile);
+      }
+    });
+  }
 
   dom.traceBtn.addEventListener('click', handleTrace);
 
@@ -458,6 +570,9 @@ function init() {
   });
 
   state.speed = parseFloat(dom.speedRange.value);
+
+  // Render selectable images from the images/ folder + any session uploads
+  renderLibrary();
 }
 
 init();
