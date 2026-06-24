@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Face → Line Art → XY Plotter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<h2>Face → Line Art → XY Plotter Simulation</h2>
+
+<div id="controls">
+  <input type="file" id="fileInput" accept="image/*" />
+  <button id="traceBtn" disabled>Trace & Simulate</button>
+  <button id="playBtn" disabled>Play</button>
+  <button id="pauseBtn" disabled>Pause</button>
+  <label>Speed:
+    <input type="range" id="speedRange" min="0.2" max="5" step="0.1" value="1" />
+  </label>
+</div>
+
+<div class="row">
+  <div>
+    <div>Original</div>
+    <canvas id="inputCanvas" width="300" height="300"></canvas>
+  </div>
+
+  <div>
+    <div>Vector (SVG)</div>
+    <div id="svgContainer" style="width:300px;height:300px;overflow:auto;background:#222;"></div>
+  </div>
+
+  <div>
+    <div>XY Plotter Simulation</div>
+    <canvas id="plotterCanvas" width="300" height="300"></canvas>
+  </div>
+</div>
+
+<!-- CSP‑safe ImageTracer.js -->
+<script src="https://unpkg.com/imagetracerjs/imagetracer_v1.2.6.js"></script>
+<script src="script.js"></script>
+
+</body>
+</html>
