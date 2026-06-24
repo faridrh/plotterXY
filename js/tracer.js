@@ -28,32 +28,37 @@ export function buildTraceOptions() {
 export async function performTrace() {
   if (!state.uploadedImage) return;
 
-  // Clear FaceMesh box by default; will be set only if FaceMesh is active
-  // Clear dedicated FaceMesh box at start of each trace (will be re-populated by update if enabled)
-  if (dom.faceMeshContainer) {
-    dom.faceMeshContainer.innerHTML = '';
-  }
-
   const useFaceMesh = !!(dom.useFaceMesh && dom.useFaceMesh.checked);
+
+  // Clear FaceMesh (raw) box only when not using FaceMesh.
+  // When using FaceMesh we will populate it directly with the initial detection result.
+  if (dom.faceMeshContainer) {
+    if (!useFaceMesh) {
+      dom.faceMeshContainer.innerHTML = '';
+    }
+  }
 
   if (useFaceMesh) {
     try {
       // FaceMesh is applied **only** to the original full-resolution image.
-      // The result (direct landmark contours) is placed straight into the Vector SVG.
-      // ImageTracer is completely bypassed for this mode to preserve maximum quality.
+      // The raw/initial detection (with ears, hairline etc.) goes to FaceMesh (raw) box.
+      // A normalized version goes to Vector (SVG) for final output / G-code / simulation.
       const landmarks = await detectFaceLandmarks();
 
-      // Direct paths from original image landmarks → shown in Vector (SVG)
+      // Build direct paths from landmarks (this is the "initial processing" result)
       let facePaths = buildFacePathsFromLandmarks(landmarks);
 
-      // Normalize to canvas (same as other paths)
+      // Show the direct/unprocessed FaceMesh result in the dedicated "FaceMesh (raw)" box.
+      // This is what the user wants to see for the face line detection (no extra normalize).
+      if (dom.faceMeshContainer) {
+        dom.faceMeshContainer.innerHTML = pathsToSVG(facePaths);
+      }
+
+      // Normalize for the final Vector view (and state used by simulator/G-code export).
+      // This keeps Vector as the "final result".
       SvgParser.normalizePaths(facePaths, CANVAS_SIZE, CANVAS_SIZE);
 
-      // Pure FaceMesh output (direct from original image, no tracing at all) 
-      // goes to the dedicated "FaceMesh (raw)" box
-      import('./faceMesh.js').then(m => m.updateFaceMeshRawBox()).catch(console.error);
-
-      // Vector also gets the raw FaceMesh (for now; can be changed to traced version of FaceMesh lines)
+      // Vector gets the (normalized) FaceMesh result
       dom.svgContainer.innerHTML = pathsToSVG(facePaths);
 
       state.pathsPoints = facePaths;
@@ -62,6 +67,10 @@ export async function performTrace() {
       return;
     } catch (err) {
       console.warn('FaceMesh processing failed, falling back to normal tracing:', err);
+      // Clean up raw box since FaceMesh path failed
+      if (dom.faceMeshContainer) {
+        dom.faceMeshContainer.innerHTML = '';
+      }
       // Optional: brief UI feedback
       if (dom.progressText) {
         const prev = dom.progressText.textContent;

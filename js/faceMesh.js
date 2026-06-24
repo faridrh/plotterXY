@@ -193,7 +193,8 @@ export async function updateFaceMeshRawBox() {
   try {
     const landmarks = await detectFaceLandmarks();
     const facePaths = buildFacePathsFromLandmarks(landmarks);
-    // Show the direct FaceMesh result with no additional normalization/post-processing
+    // Direct result of initial FaceMesh detection (ears, hairline, face lines etc.)
+    // No normalize or other post-processing applied, for the "FaceMesh (raw)" preview.
     dom.faceMeshContainer.innerHTML = pathsToSVG(facePaths);
   } catch (err) {
     console.warn('FaceMesh raw box update failed:', err);
