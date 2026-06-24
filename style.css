@@ -98,3 +98,94 @@ input[type="range"] {
   font-size: 11px;
   opacity: 0.6;
 }
+
+#tuningPanel {
+  margin: 10px 0 16px;
+  padding: 8px 10px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.tuning-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.tuning-header button {
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
+.preset-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.preset-buttons button {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: #222;
+  border: 1px solid #444;
+  color: #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.preset-buttons button:hover {
+  border-color: #00ff88;
+  color: #fff;
+}
+
+.params-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px 14px;
+}
+
+.param {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.param-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.param-name {
+  opacity: 0.85;
+}
+
+.param-value {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.95;
+  min-width: 26px;
+  text-align: right;
+}
+
+.param input[type="range"] {
+  width: 100%;
+}
+
+.param-checkbox {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.tuning-hint {
+  margin-top: 6px;
+  font-size: 10px;
+  opacity: 0.55;
+}

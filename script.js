@@ -1,21 +1,63 @@
 const CANVAS_SIZE = 300;
 const PIXEL_TO_MM = 0.2;
 const STROKE_COLOR = '#00ff88';
-const BEZIER_STEPS = 10;
+let BEZIER_STEPS = 10;
 const NORMALIZE_PADDING = 0.9;
 
-const TRACE_OPTIONS = {
-  // Lower fidelity settings tuned for clean plotter output (fewer noisy micro-paths)
-  ltres: 1.5,
-  qtres: 1.5,
-  pathomit: 14,            // default in lib is 8; higher = drop more tiny noise paths
+const DEFAULT_PARAMS = {
+  // "Simple" preset defaults (clean, minimal lines for plotter)
+  ltres: 2,
+  qtres: 2,
+  pathomit: 20,
   numberofcolors: 2,
-  strokewidth: 1,
-  linefilter: true,
-  scale: 1,
-  // Optional preprocessing that can help with photo noise
-  // blurradius: 1,
-  // blurdelta: 30,
+  blurradius: 0,
+  blurdelta: 20,
+  bezierSteps: 8,
+  simplifyTolerance: 1.0,
+  minPoints: 4,
+  minLength: 4,
+  sortByLength: true,
+};
+
+let currentParams = { ...DEFAULT_PARAMS };
+
+const PRESETS = {
+  simple: {
+    ltres: 2,
+    qtres: 2,
+    pathomit: 20,
+    numberofcolors: 2,
+    blurradius: 0,
+    bezierSteps: 8,
+    simplifyTolerance: 1.0,
+    minPoints: 4,
+    minLength: 4,
+    sortByLength: true,
+  },
+  balanced: {
+    ltres: 1,
+    qtres: 1,
+    pathomit: 10,
+    numberofcolors: 3,
+    blurradius: 0,
+    bezierSteps: 10,
+    simplifyTolerance: 0.7,
+    minPoints: 3,
+    minLength: 3,
+    sortByLength: true,
+  },
+  detailed: {
+    ltres: 0.5,
+    qtres: 0.5,
+    pathomit: 4,
+    numberofcolors: 4,
+    blurradius: 0,
+    bezierSteps: 12,
+    simplifyTolerance: 0.4,
+    minPoints: 2,
+    minLength: 1.5,
+    sortByLength: true,
+  },
 };
 
 const GCODE_CONFIG = {
@@ -44,6 +86,27 @@ const dom = {
   svgContainer: document.getElementById('svgContainer'),
   libraryThumbnails: document.getElementById('libraryThumbnails'),
   saveToLibraryBtn: document.getElementById('saveToLibraryBtn'),
+  // Tuning params
+  resetParamsBtn: document.getElementById('resetParamsBtn'),
+  paramLtres: document.getElementById('paramLtres'),
+  paramQtres: document.getElementById('paramQtres'),
+  paramPathomit: document.getElementById('paramPathomit'),
+  paramNumColors: document.getElementById('paramNumColors'),
+  paramBlur: document.getElementById('paramBlur'),
+  paramBezier: document.getElementById('paramBezier'),
+  paramSimplify: document.getElementById('paramSimplify'),
+  paramMinLen: document.getElementById('paramMinLen'),
+  paramMinPts: document.getElementById('paramMinPts'),
+  paramSort: document.getElementById('paramSort'),
+  valLtres: document.getElementById('valLtres'),
+  valQtres: document.getElementById('valQtres'),
+  valPathomit: document.getElementById('valPathomit'),
+  valNumColors: document.getElementById('valNumColors'),
+  valBlur: document.getElementById('valBlur'),
+  valBezier: document.getElementById('valBezier'),
+  valSimplify: document.getElementById('valSimplify'),
+  valMinLen: document.getElementById('valMinLen'),
+  valMinPts: document.getElementById('valMinPts'),
 };
 
 const inputCtx = dom.inputCanvas.getContext('2d');
@@ -65,7 +128,15 @@ const state = {
 const SvgParser = {
   TOKEN_REGEX: /[a-zA-Z]|-?\d*\.?\d+/g,
 
-  extractPaths(svg) {
+  extractPaths(svg, postOpts = {}) {
+    const opts = {
+      simplifyTolerance: 0.9,
+      minPoints: 3,
+      minLength: 3.5,
+      sortByLength: true,
+      ...postOpts,
+    };
+
     const paths = [];
     const pathRegex = /<path[^>]*d="([^"]+)"[^>]*>/g;
     let match;
@@ -77,17 +148,15 @@ const SvgParser = {
 
     this.normalizePaths(paths, CANVAS_SIZE, CANVAS_SIZE);
 
-    // === Post-processing for cleaner plotter output ===
-    // 1. Filter out tiny/noisy paths that ImageTracer still produced
-    let filtered = this.filterShortPaths(paths);
+    // === Configurable post-processing ===
+    let filtered = this.filterShortPaths(paths, opts.minPoints, opts.minLength);
 
-    // 2. Simplify paths (remove nearly-collinear points) to reduce wiggly over-detail
-    filtered = filtered.map(p => this.simplifyPath(p, 0.9))
+    filtered = filtered.map(p => this.simplifyPath(p, opts.simplifyTolerance))
                        .filter(p => p.length > 1);
 
-    // 3. Sort by descending length so major strokes come first.
-    //    This makes the drawing look good much earlier (user's "50%" problem).
-    filtered.sort((a, b) => this.computePathLength(b) - this.computePathLength(a));
+    if (opts.sortByLength) {
+      filtered.sort((a, b) => this.computePathLength(b) - this.computePathLength(a));
+    }
 
     return filtered;
   },
@@ -104,12 +173,10 @@ const SvgParser = {
   },
 
   // Basic filter using point count + path length
-  filterShortPaths(paths) {
-    const MIN_POINTS = 3;
-    const MIN_LENGTH = 3.5;
+  filterShortPaths(paths, minPoints = 3, minLength = 3.5) {
     return paths.filter(path => {
-      if (path.length < MIN_POINTS) return false;
-      return this.computePathLength(path) >= MIN_LENGTH;
+      if (path.length < minPoints) return false;
+      return this.computePathLength(path) >= minLength;
     });
   },
 
@@ -476,6 +543,8 @@ const ImageLoader = {
       this.drawCentered(img, inputCtx);
       dom.traceBtn.disabled = false;
       if (dom.saveToLibraryBtn) dom.saveToLibraryBtn.disabled = false;
+      // Auto-trace for easy experimentation with tuning params
+      performTrace();
     };
     img.src = URL.createObjectURL(file);
   },
@@ -489,6 +558,8 @@ const ImageLoader = {
       this.drawCentered(img, inputCtx);
       dom.traceBtn.disabled = false;
       if (dom.saveToLibraryBtn) dom.saveToLibraryBtn.disabled = true;
+      // Auto-trace for easy experimentation
+      performTrace();
     };
     img.onerror = () => {
       alert('Failed to load image: ' + (displayName || url));
@@ -571,20 +642,165 @@ function createThumbnail(src, label, onClick) {
   return wrapper;
 }
 
-function handleTrace() {
+// =====================
+// Tuning parameter helpers
+// =====================
+
+function getCurrentParamsFromUI() {
+  const p = { ...currentParams };
+  if (dom.paramLtres) p.ltres = parseFloat(dom.paramLtres.value);
+  if (dom.paramQtres) p.qtres = parseFloat(dom.paramQtres.value);
+  if (dom.paramPathomit) p.pathomit = parseFloat(dom.paramPathomit.value);
+  if (dom.paramNumColors) p.numberofcolors = parseInt(dom.paramNumColors.value, 10);
+  if (dom.paramBlur) p.blurradius = parseInt(dom.paramBlur.value, 10);
+  if (dom.paramBezier) p.bezierSteps = parseInt(dom.paramBezier.value, 10);
+  if (dom.paramSimplify) p.simplifyTolerance = parseFloat(dom.paramSimplify.value);
+  if (dom.paramMinLen) p.minLength = parseFloat(dom.paramMinLen.value);
+  if (dom.paramMinPts) p.minPoints = parseInt(dom.paramMinPts.value, 10);
+  if (dom.paramSort) p.sortByLength = !!dom.paramSort.checked;
+  return p;
+}
+
+function updateParamLabels(p = currentParams) {
+  if (dom.valLtres) dom.valLtres.textContent = Number(p.ltres).toFixed(1);
+  if (dom.valQtres) dom.valQtres.textContent = Number(p.qtres).toFixed(1);
+  if (dom.valPathomit) dom.valPathomit.textContent = p.pathomit;
+  if (dom.valNumColors) dom.valNumColors.textContent = p.numberofcolors;
+  if (dom.valBlur) dom.valBlur.textContent = p.blurradius;
+  if (dom.valBezier) dom.valBezier.textContent = p.bezierSteps;
+  if (dom.valSimplify) dom.valSimplify.textContent = Number(p.simplifyTolerance).toFixed(1);
+  if (dom.valMinLen) dom.valMinLen.textContent = Number(p.minLength).toFixed(1);
+  if (dom.valMinPts) dom.valMinPts.textContent = p.minPoints;
+}
+
+function syncUIFromParams(p) {
+  if (dom.paramLtres) dom.paramLtres.value = p.ltres;
+  if (dom.paramQtres) dom.paramQtres.value = p.qtres;
+  if (dom.paramPathomit) dom.paramPathomit.value = p.pathomit;
+  if (dom.paramNumColors) dom.paramNumColors.value = p.numberofcolors;
+  if (dom.paramBlur) dom.paramBlur.value = p.blurradius;
+  if (dom.paramBezier) dom.paramBezier.value = p.bezierSteps;
+  if (dom.paramSimplify) dom.paramSimplify.value = p.simplifyTolerance;
+  if (dom.paramMinLen) dom.paramMinLen.value = p.minLength;
+  if (dom.paramMinPts) dom.paramMinPts.value = p.minPoints;
+  if (dom.paramSort) dom.paramSort.checked = !!p.sortByLength;
+  updateParamLabels(p);
+}
+
+function resetToDefaultParams() {
+  currentParams = { ...DEFAULT_PARAMS };
+  syncUIFromParams(currentParams);
+  if (state.uploadedImage) {
+    performTrace();
+  }
+}
+
+function applyPreset(name) {
+  if (!PRESETS[name]) return;
+  currentParams = {
+    ...currentParams,
+    ...PRESETS[name],
+  };
+  syncUIFromParams(currentParams);
+  if (state.uploadedImage) {
+    performTrace();
+  }
+}
+
+let retraceTimeout = null;
+function debouncedRetrace() {
+  if (!state.uploadedImage) return;
+  clearTimeout(retraceTimeout);
+  retraceTimeout = setTimeout(() => {
+    performTrace();
+  }, 260);
+}
+
+function initTuningParams() {
+  currentParams = { ...DEFAULT_PARAMS };
+  syncUIFromParams(currentParams);
+
+  // Attach listeners for all range inputs
+  const rangeIds = [
+    'paramLtres', 'paramQtres', 'paramPathomit', 'paramNumColors',
+    'paramBlur', 'paramBezier', 'paramSimplify', 'paramMinLen', 'paramMinPts'
+  ];
+  rangeIds.forEach(id => {
+    const el = dom[id];
+    if (el) {
+      el.addEventListener('input', () => {
+        currentParams = getCurrentParamsFromUI();
+        updateParamLabels(currentParams);
+        debouncedRetrace();
+      });
+    }
+  });
+
+  if (dom.paramSort) {
+    dom.paramSort.addEventListener('change', () => {
+      currentParams = getCurrentParamsFromUI();
+      debouncedRetrace();
+    });
+  }
+
+  if (dom.resetParamsBtn) {
+    dom.resetParamsBtn.addEventListener('click', resetToDefaultParams);
+  }
+
+  // Wire quick preset buttons (Simple / Balanced / Detailed)
+  const presetButtons = document.querySelectorAll('#tuningPanel [data-preset]');
+  presetButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyPreset(btn.dataset.preset);
+    });
+  });
+}
+
+function performTrace() {
   if (!state.uploadedImage) return;
 
   const dataURL = dom.inputCanvas.toDataURL('image/png');
+  const traceOpts = buildTraceOptions();
+
+  // Apply current bezier resolution for this trace
+  BEZIER_STEPS = currentParams.bezierSteps || 10;
+
   ImageTracer.imageToSVG(
     dataURL,
     (svg) => {
       dom.svgContainer.innerHTML = svg;
-      state.pathsPoints = SvgParser.extractPaths(svg);
+      const postOpts = {
+        bezierSteps: currentParams.bezierSteps,
+        simplifyTolerance: currentParams.simplifyTolerance,
+        minPoints: currentParams.minPoints,
+        minLength: currentParams.minLength,
+        sortByLength: currentParams.sortByLength,
+      };
+      state.pathsPoints = SvgParser.extractPaths(svg, postOpts);
       PlotterSimulator.reset();
       enableSimulationControls();
     },
-    TRACE_OPTIONS
+    traceOpts
   );
+}
+
+function buildTraceOptions() {
+  const p = currentParams;
+  return {
+    ltres: p.ltres,
+    qtres: p.qtres,
+    pathomit: p.pathomit,
+    numberofcolors: p.numberofcolors,
+    strokewidth: 1,
+    linefilter: true,
+    scale: 1,
+    blurradius: p.blurradius || 0,
+    blurdelta: p.blurdelta || 20,
+  };
+}
+
+function handleTrace() {
+  performTrace();
 }
 
 function init() {
@@ -640,6 +856,9 @@ function init() {
 
   // Render selectable images from the images/ folder + any session uploads
   renderLibrary();
+
+  // Initialize tuning UI + currentParams
+  initTuningParams();
 }
 
 init();

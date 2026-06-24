@@ -31,6 +31,91 @@
   <div class="library-hint">Add more images by placing files in the <code>images/</code> folder and updating the list in script.js, or use "Save to images/ folder" after uploading.</div>
 </div>
 
+<div id="tuningPanel">
+  <div class="tuning-header">
+    <strong>Tuning Parameters</strong>
+    <button id="resetParamsBtn" type="button">Reset defaults</button>
+  </div>
+
+  <div class="preset-buttons">
+    <span>Quick presets:</span>
+    <button data-preset="simple" type="button">Simple</button>
+    <button data-preset="balanced" type="button">Balanced</button>
+    <button data-preset="detailed" type="button">Detailed</button>
+  </div>
+
+  <div class="params-grid">
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">ltres</span>
+        <span class="param-value" id="valLtres">2.0</span>
+      </div>
+      <input type="range" id="paramLtres" min="0.1" max="5" step="0.1" value="2">
+    </div>
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">qtres</span>
+        <span class="param-value" id="valQtres">2.0</span>
+      </div>
+      <input type="range" id="paramQtres" min="0.1" max="5" step="0.1" value="2">
+    </div>
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">pathomit</span>
+        <span class="param-value" id="valPathomit">20</span>
+      </div>
+      <input type="range" id="paramPathomit" min="0" max="40" step="1" value="20">
+    </div>
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">num colors</span>
+        <span class="param-value" id="valNumColors">2</span>
+      </div>
+      <input type="range" id="paramNumColors" min="1" max="16" step="1" value="2">
+    </div>
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">blur radius</span>
+        <span class="param-value" id="valBlur">0</span>
+      </div>
+      <input type="range" id="paramBlur" min="0" max="5" step="1" value="0">
+    </div>
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">bezier steps</span>
+        <span class="param-value" id="valBezier">10</span>
+      </div>
+      <input type="range" id="paramBezier" min="4" max="24" step="1" value="10">
+    </div>
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">simplify tol</span>
+        <span class="param-value" id="valSimplify">0.9</span>
+      </div>
+      <input type="range" id="paramSimplify" min="0" max="4" step="0.1" value="0.9">
+    </div>
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">min length</span>
+        <span class="param-value" id="valMinLen">3.5</span>
+      </div>
+      <input type="range" id="paramMinLen" min="0" max="15" step="0.5" value="3.5">
+    </div>
+    <div class="param">
+      <div class="param-row">
+        <span class="param-name">min points</span>
+        <span class="param-value" id="valMinPts">3</span>
+      </div>
+      <input type="range" id="paramMinPts" min="2" max="10" step="1" value="3">
+    </div>
+  </div>
+
+  <div class="param-checkbox">
+    <label><input type="checkbox" id="paramSort"> Sort by length (big strokes first)</label>
+  </div>
+  <div class="tuning-hint">Changes re-trace automatically. Try the Quick presets above. Lower pathomit or simplify tol to get more detail back.</div>
+</div>
+
 <div class="row">
   <div>
     <div>Original</div>
