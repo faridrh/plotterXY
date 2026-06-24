@@ -13,6 +13,7 @@ export const dom = {
   inputCanvas: document.getElementById('inputCanvas'),
   plotterCanvas: document.getElementById('plotterCanvas'),
   svgContainer: document.getElementById('svgContainer'),
+  faceMeshContainer: document.getElementById('faceMeshContainer'),
   libraryThumbnails: document.getElementById('libraryThumbnails'),
   saveToLibraryBtn: document.getElementById('saveToLibraryBtn'),
   // Tuning params

@@ -28,22 +28,34 @@ export function buildTraceOptions() {
 export async function performTrace() {
   if (!state.uploadedImage) return;
 
+  // Clear FaceMesh box by default; will be set only if FaceMesh is active
+  // Clear dedicated FaceMesh box at start of each trace
+  if (dom.faceMeshContainer) {
+    dom.faceMeshContainer.innerHTML = '';
+  }
+
   const useFaceMesh = !!(dom.useFaceMesh && dom.useFaceMesh.checked);
 
   if (useFaceMesh) {
     try {
-      // detectFaceLandmarks now always uses the *original* image (not the scaled inputCanvas)
-      // for much better detection of ears, hairline and other outer features.
-      const landmarks = await detectFaceLandmarks(dom.inputCanvas);
+      // FaceMesh is applied **only** to the original full-resolution image.
+      // The result (direct landmark contours) is placed straight into the Vector SVG.
+      // ImageTracer is completely bypassed for this mode to preserve maximum quality.
+      const landmarks = await detectFaceLandmarks();
 
-      // Build paths DIRECTLY from landmarks (exact face features from the selfie)
-      // This ensures the lines accurately represent the uploaded face.
+      // Direct paths from original image landmarks → shown in Vector (SVG)
       let facePaths = buildFacePathsFromLandmarks(landmarks);
 
       // Normalize to canvas (same as other paths)
       SvgParser.normalizePaths(facePaths, CANVAS_SIZE, CANVAS_SIZE);
 
-      // Show clean direct SVG preview
+      // Pure FaceMesh output (direct from original image, no tracing at all) 
+      // goes to the dedicated "FaceMesh (raw)" box
+      if (dom.faceMeshContainer) {
+        dom.faceMeshContainer.innerHTML = pathsToSVG(facePaths);
+      }
+
+      // Vector also gets the raw FaceMesh for now
       dom.svgContainer.innerHTML = pathsToSVG(facePaths);
 
       state.pathsPoints = facePaths;

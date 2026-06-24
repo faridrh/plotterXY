@@ -29,9 +29,10 @@ export async function ensureFaceLandmarker() {
   return faceLandmarker;
 }
 
-export async function detectFaceLandmarks(imageSource) {
-  // Always detect on the original high-res image for better accuracy on outer features (ears, hairline)
-  // Then map to the same coordinate space as the centered canvas drawing.
+export async function detectFaceLandmarks() {
+  // FaceMesh is ALWAYS applied to the ORIGINAL full-resolution image (state.uploadedImage),
+  // never to the scaled/centered version on the canvas or any traced/raster version.
+  // This preserves maximum quality for landmark detection (especially ears and hairline).
   const original = state.uploadedImage;
   if (!original) {
     throw new Error('No original image available for FaceMesh detection.');
@@ -45,15 +46,14 @@ export async function detectFaceLandmarks(imageSource) {
 
   const rawLms = results.faceLandmarks[0];
 
-  // Compute the exact same transform as drawCentered in imageLoader
+  // Map the landmarks from original image space into the same centered coordinate
+  // space used for the 300x300 canvas (so the lines appear correctly in the Vector view).
   const scale = Math.min(CANVAS_SIZE / original.width, CANVAS_SIZE / original.height);
   const w = original.width * scale;
   const h = original.height * scale;
   const offX = (CANVAS_SIZE - w) / 2;
   const offY = (CANVAS_SIZE - h) / 2;
 
-  // Return landmarks normalized to [0,1] relative to the 300x300 canvas
-  // (so existing * size logic in draw/build continues to work)
   return rawLms.map(lm => ({
     x: (offX + lm.x * w) / CANVAS_SIZE,
     y: (offY + lm.y * h) / CANVAS_SIZE
@@ -107,10 +107,10 @@ export function drawFaceLines(ctx, landmarks, size) {
 }
 
 export async function processWithFaceMesh() {
-  // Note: detectFaceLandmarks now always runs on the *original* full-resolution image
-  // (not the scaled/centered version on the canvas) and remaps coordinates.
-  // This significantly improves accuracy for outer features like ears and hairline.
-  const landmarks = await detectFaceLandmarks(dom.inputCanvas);
+  // Note: This helper still uses the original image for detection.
+  // However, the main FaceMesh checkbox path (in tracer.js) bypasses this entirely
+  // and goes direct from original landmarks → Vector SVG (no raster / ImageTracer).
+  const landmarks = await detectFaceLandmarks();
 
   const procCanvas = document.createElement('canvas');
   procCanvas.width = CANVAS_SIZE;
