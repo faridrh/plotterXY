@@ -100,9 +100,10 @@
     if (!window._uploadedImage) return;
 
     const options = {
-      ltres: 0.5,
-      qtres: 0.5,
-      pathomit: 0,
+      // Cleaner settings for plotter (same philosophy as script.js)
+      ltres: 1.5,
+      qtres: 1.5,
+      pathomit: 14,
       numberofcolors: 2,
       strokewidth: 1,
       linefilter: true,
@@ -179,8 +180,8 @@ const dataURL = inputCanvas.toDataURL("image/png");
           let x3 = parseFloat(tokens[i++]);
           let y3 = parseFloat(tokens[i++]);
 
-          // flatten cubic Bézier into 20 segments
-          for (let t = 0; t <= 1; t += 0.05) {
+          // flatten cubic Bézier (reduced steps for cleaner output)
+          for (let t = 0; t <= 1; t += 0.1) {
             const xt = (1-t)**3 * x + 3*(1-t)**2 * t * x1 + 3*(1-t)*t**2 * x2 + t**3 * x3;
             const yt = (1-t)**3 * y + 3*(1-t)**2 * t * y1 + 3*(1-t)*t**2 * y2 + t**3 * y3;
             addPoint(xt, yt);
@@ -196,7 +197,7 @@ const dataURL = inputCanvas.toDataURL("image/png");
           let y2 = parseFloat(tokens[i++]);
 
           // flatten quadratic Bézier
-          for (let t = 0; t <= 1; t += 0.05) {
+          for (let t = 0; t <= 1; t += 0.1) {
             const xt = (1-t)**2 * x + 2*(1-t)*t * x1 + t**2 * x2;
             const yt = (1-t)**2 * y + 2*(1-t)*t * y1 + t**2 * y2;
             addPoint(xt, yt);
@@ -219,6 +220,62 @@ const dataURL = inputCanvas.toDataURL("image/png");
   }
 
   normalizePaths(pathsPoints, 300, 300);
+
+  // === Post-processing (same goal as script.js) ===
+  pathsPoints = filterAndSimplifyPaths(pathsPoints);
+}
+
+// Simple length calculator
+function computePathLength(path) {
+  let len = 0;
+  for (let i = 1; i < path.length; i++) {
+    const dx = path[i].x - path[i-1].x;
+    const dy = path[i].y - path[i-1].y;
+    len += Math.hypot(dx, dy);
+  }
+  return len;
+}
+
+function filterAndSimplifyPaths(paths) {
+  const MIN_POINTS = 3;
+  const MIN_LENGTH = 3.5;
+
+  // filter
+  let out = paths.filter(p => p.length >= MIN_POINTS && computePathLength(p) >= MIN_LENGTH);
+
+  // light simplify
+  out = out.map(p => simplifyPath(p, 0.9))
+           .filter(p => p.length > 1);
+
+  // largest strokes first (better visual after ~50% of paths)
+  out.sort((a, b) => computePathLength(b) - computePathLength(a));
+
+  return out;
+}
+
+function simplifyPath(points, tolerance = 1.0) {
+  if (points.length <= 2) return points.slice();
+  const result = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+    if (perpDistance(curr, prev, next) > tolerance) {
+      result.push(curr);
+    }
+  }
+  result.push(points[points.length - 1]);
+  return result;
+}
+
+function perpDistance(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy || 1;
+  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+  const projX = a.x + t * dx;
+  const projY = a.y + t * dy;
+  return Math.hypot(p.x - projX, p.y - projY);
 }
 
   function normalizePaths(paths, w, h) {

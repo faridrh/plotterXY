@@ -1,17 +1,21 @@
 const CANVAS_SIZE = 300;
 const PIXEL_TO_MM = 0.2;
 const STROKE_COLOR = '#00ff88';
-const BEZIER_STEPS = 20;
+const BEZIER_STEPS = 10;
 const NORMALIZE_PADDING = 0.9;
 
 const TRACE_OPTIONS = {
-  ltres: 0.5,
-  qtres: 0.5,
-  pathomit: 0,
+  // Lower fidelity settings tuned for clean plotter output (fewer noisy micro-paths)
+  ltres: 1.5,
+  qtres: 1.5,
+  pathomit: 14,            // default in lib is 8; higher = drop more tiny noise paths
   numberofcolors: 2,
   strokewidth: 1,
   linefilter: true,
   scale: 1,
+  // Optional preprocessing that can help with photo noise
+  // blurradius: 1,
+  // blurdelta: 30,
 };
 
 const GCODE_CONFIG = {
@@ -72,7 +76,69 @@ const SvgParser = {
     }
 
     this.normalizePaths(paths, CANVAS_SIZE, CANVAS_SIZE);
-    return paths;
+
+    // === Post-processing for cleaner plotter output ===
+    // 1. Filter out tiny/noisy paths that ImageTracer still produced
+    let filtered = this.filterShortPaths(paths);
+
+    // 2. Simplify paths (remove nearly-collinear points) to reduce wiggly over-detail
+    filtered = filtered.map(p => this.simplifyPath(p, 0.9))
+                       .filter(p => p.length > 1);
+
+    // 3. Sort by descending length so major strokes come first.
+    //    This makes the drawing look good much earlier (user's "50%" problem).
+    filtered.sort((a, b) => this.computePathLength(b) - this.computePathLength(a));
+
+    return filtered;
+  },
+
+  // Returns approximate total length of a path
+  computePathLength(path) {
+    let len = 0;
+    for (let i = 1; i < path.length; i++) {
+      const dx = path[i].x - path[i - 1].x;
+      const dy = path[i].y - path[i - 1].y;
+      len += Math.hypot(dx, dy);
+    }
+    return len;
+  },
+
+  // Basic filter using point count + path length
+  filterShortPaths(paths) {
+    const MIN_POINTS = 3;
+    const MIN_LENGTH = 3.5;
+    return paths.filter(path => {
+      if (path.length < MIN_POINTS) return false;
+      return this.computePathLength(path) >= MIN_LENGTH;
+    });
+  },
+
+  // Light path simplification: drops points that are close to the line between neighbors.
+  // tolerance controls aggressiveness (higher = more aggressive simplification)
+  simplifyPath(points, tolerance = 1.0) {
+    if (points.length <= 2) return points.slice();
+
+    const result = [points[0]];
+    for (let i = 1; i < points.length - 1; i++) {
+      const prev = result[result.length - 1];
+      const curr = points[i];
+      const next = points[i + 1];
+      if (this.perpendicularDistance(curr, prev, next) > tolerance) {
+        result.push(curr);
+      }
+    }
+    result.push(points[points.length - 1]);
+    return result;
+  },
+
+  perpendicularDistance(p, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy || 1;
+    const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    const projX = a.x + t * dx;
+    const projY = a.y + t * dy;
+    return Math.hypot(p.x - projX, p.y - projY);
   },
 
   parsePathData(d) {
@@ -242,7 +308,8 @@ const PlotterSimulator = {
     }
 
     const percent = totalPoints > 0 ? Math.floor((completedPoints / totalPoints) * 100) : 0;
-    dom.progressText.textContent = `Progress: ${percent}%`;
+    const pathIdx = Math.min(state.currentPathIndex, state.pathsPoints.length);
+    dom.progressText.textContent = `Progress: ${percent}% (${pathIdx}/${state.pathsPoints.length} paths)`;
   },
 
   step() {
