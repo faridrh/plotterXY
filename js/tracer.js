@@ -36,18 +36,29 @@ export async function performTrace() {
 
       const traceOpts = buildTraceOptions();
       const params = getCurrentParams();
-      setBezierSteps(params.bezierSteps || 10);
+
+      // For FaceMesh we want to preserve the clean lines, so use more permissive settings
+      // (lower pathomit, lower simplification) than the "Simple" photo preset.
+      const faceMeshParams = {
+        ...params,
+        pathomit: Math.min(params.pathomit, 5),
+        simplifyTolerance: Math.min(params.simplifyTolerance, 0.5),
+        minLength: Math.min(params.minLength, 2),
+        minPoints: Math.min(params.minPoints, 2),
+      };
+
+      setBezierSteps(faceMeshParams.bezierSteps || 10);
 
       ImageTracer.imageToSVG(
         processedDataUrl,
         (svg) => {
           dom.svgContainer.innerHTML = svg;
           const postOpts = {
-            bezierSteps: params.bezierSteps,
-            simplifyTolerance: params.simplifyTolerance,
-            minPoints: params.minPoints,
-            minLength: params.minLength,
-            sortByLength: params.sortByLength,
+            bezierSteps: faceMeshParams.bezierSteps,
+            simplifyTolerance: faceMeshParams.simplifyTolerance,
+            minPoints: faceMeshParams.minPoints,
+            minLength: faceMeshParams.minLength,
+            sortByLength: faceMeshParams.sortByLength,
           };
           state.pathsPoints = SvgParser.extractPaths(svg, postOpts);
           PlotterSimulator.reset();
@@ -58,6 +69,16 @@ export async function performTrace() {
       return;
     } catch (err) {
       console.warn('FaceMesh processing failed, falling back to normal tracing:', err);
+      // Optional: brief UI feedback
+      if (dom.progressText) {
+        const prev = dom.progressText.textContent;
+        dom.progressText.textContent = 'FaceMesh unavailable (see console) - normal trace';
+        setTimeout(() => {
+          if (dom.progressText && dom.progressText.textContent.includes('FaceMesh unavailable')) {
+            dom.progressText.textContent = prev || 'Progress: 0%';
+          }
+        }, 2200);
+      }
     }
   }
 

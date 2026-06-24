@@ -7,26 +7,21 @@ let faceLandmarker = null;
 export async function ensureFaceLandmarker() {
   if (faceLandmarker) return faceLandmarker;
 
-  if (!window.FilesetResolver || !window.FaceLandmarker) {
-    await new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.js';
-      script.crossOrigin = 'anonymous';
-      script.onload = resolve;
-      script.onerror = () => reject(new Error('Failed to load MediaPipe library. Check your internet connection.'));
-      document.head.appendChild(script);
-    });
-  }
-
-  const vision = await window.FilesetResolver.forVisionTasks(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm'
+  // Use the WASM Tasks API via ESM (no vision_bundle.js)
+  // Correct entry point is the package root (not /tasks-vision.js)
+  const { FilesetResolver, FaceLandmarker } = await import(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35"
   );
 
-  faceLandmarker = await window.FaceLandmarker.createFromOptions(vision, {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm"
+  );
+
+  faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
     baseOptions: {
-      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
     },
-    runningMode: 'IMAGE',
+    runningMode: "IMAGE",
     numFaces: 1,
   });
 
@@ -42,34 +37,41 @@ export async function detectFaceLandmarks(imageSource) {
   return results.faceLandmarks[0];
 }
 
-const FACE_CONNECTIONS = [
-  [10,338],[338,297],[297,332],[332,284],[284,251],[251,389],[389,356],[356,454],[454,323],[323,361],[361,288],[288,397],[397,365],[365,379],[379,378],[378,400],[400,377],[377,152],[152,148],[148,176],[176,149],[149,150],[150,136],[136,172],[172,58],[58,132],[132,93],[93,234],[234,127],[127,162],[162,21],[21,54],[54,103],[103,67],[67,109],[109,10],
-  [61,146],[146,91],[91,181],[181,84],[84,17],[17,314],[314,405],[405,321],[321,375],[375,291],[291,409],[409,270],[270,269],[269,267],[267,0],[0,37],[37,39],[39,40],[40,185],[185,61],
-  [263,249],[249,390],[390,373],[373,374],[374,380],[380,381],[381,382],[382,362],[362,263],
-  [33,7],[7,163],[163,144],[144,145],[145,153],[153,154],[154,155],[155,133],[133,33],
-  [276,283],[283,282],[282,295],[295,285],[285,300],[300,293],[293,334],[334,296],[296,336],
-  [46,53],[53,52],[52,65],[65,55],[55,70],[70,63],[63,105],[105,66],[66,107],
-  [168,6],[6,197],[197,195],[195,5],[5,4],[4,1],[1,275],[275,274],[274,455],[455,308]
-];
-
 export function drawFaceLines(ctx, landmarks, size) {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, size, size);
   ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 4.5;  // thicker lines so the clean face contours survive ImageTracer + post-processing
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  FACE_CONNECTIONS.forEach(([start, end]) => {
-    const p1 = landmarks[start];
-    const p2 = landmarks[end];
-    if (p1 && p2) {
-      ctx.beginPath();
-      ctx.moveTo(p1.x * size, p1.y * size);
-      ctx.lineTo(p2.x * size, p2.y * size);
-      ctx.stroke();
+  // Use the same feature groups for nice continuous strokes
+  const featureIndices = {
+    faceOval: [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10],
+    rightEye: [33,7,163,144,145,153,154,155,133,33],
+    leftEye: [263,249,390,373,374,380,381,382,362,263],
+    rightEyebrow: [46,53,52,65,55,70,63,105,66,107],
+    leftEyebrow: [276,283,282,295,285,300,293,334,296,336],
+    lips: [61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40,185,61],
+    noseBridge: [168,6,197,195,5,4,1],
+    noseBase: [4,275,274,455,308]
+  };
+
+  for (const indices of Object.values(featureIndices)) {
+    const pts = indices.map(i => {
+      const lm = landmarks[i];
+      return lm ? { x: lm.x * size, y: lm.y * size } : null;
+    }).filter(Boolean);
+
+    if (pts.length < 2) continue;
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
     }
-  });
+    ctx.stroke();
+  }
 }
 
 export async function processWithFaceMesh() {
