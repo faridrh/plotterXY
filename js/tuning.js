@@ -4,19 +4,18 @@ import { state } from './state.js';
 import {
   DEFAULT_PARAMS,
   PRESETS,
-  currentParams as _currentParams,
   setBezierSteps,
 } from './config.js';
 
-// Use the window bridge set by main.js to avoid circular imports
+// Use dynamic import for trace to keep modules decoupled
 function performTraceSafe() {
-  if (window.performTraceSafe) {
-    window.performTraceSafe();
-  }
+  import('./tracer.js')
+    .then(m => m.performTraceSafe())
+    .catch(console.error);
 }
 
-// We keep a local reference and sync back
-let currentParams = _currentParams;
+// Local management of current params (source of truth for UI/tuning)
+let currentParams = { ...DEFAULT_PARAMS };
 
 export function getCurrentParams() {
   return currentParams;

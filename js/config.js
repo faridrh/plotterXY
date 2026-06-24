@@ -22,7 +22,8 @@ export const DEFAULT_PARAMS = {
   sortByLength: true,
 };
 
-export let currentParams = { ...DEFAULT_PARAMS };
+// currentParams is managed in tuning.js for better encapsulation.
+
 
 export const PRESETS = {
   simple: {

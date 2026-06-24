@@ -3,23 +3,12 @@ import { AVAILABLE_IMAGES } from './config.js';
 import { dom } from './dom.js';
 import { state } from './state.js';
 import { ImageLoader } from './imageLoader.js';
+import { downloadFileToSave } from './utils.js';
 
 export function enableSimulationControls() {
   for (const button of [dom.playBtn, dom.pauseBtn, dom.exportGcodeBtn, dom.exportJsonBtn]) {
     button.disabled = false;
   }
-}
-
-export function downloadFileToSave(file) {
-  if (!file) return;
-  const url = URL.createObjectURL(file);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = file.name || 'image.png';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 export function addSessionImageFromFile(file, objectUrl) {

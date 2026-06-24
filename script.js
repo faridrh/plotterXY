@@ -1,8 +1,8 @@
 // NOTE: This file has been split into modules under /js/
 // The active entry point is now loaded via <script type="module" src="js/main.js"></script> in index.html
+// See js/README.md for module descriptions.
 // You can safely delete this file if everything works.
 
-const CANVAS_SIZE = 300;
 const PIXEL_TO_MM = 0.2;
 const STROKE_COLOR = '#00ff88';
 let BEZIER_STEPS = 10;

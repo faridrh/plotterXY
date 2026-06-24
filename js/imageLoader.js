@@ -28,10 +28,8 @@ export const ImageLoader = {
       dom.traceBtn.disabled = false;
       if (dom.saveToLibraryBtn) dom.saveToLibraryBtn.disabled = false;
 
-      // Auto-trace (safe call - defined in main)
-      if (window.performTraceSafe) {
-        window.performTraceSafe();
-      }
+      // Auto-trace using dynamic import to avoid tight coupling
+      import('./tracer.js').then(m => m.performTraceSafe()).catch(console.error);
     };
     img.src = URL.createObjectURL(file);
   },
@@ -46,9 +44,7 @@ export const ImageLoader = {
       dom.traceBtn.disabled = false;
       if (dom.saveToLibraryBtn) dom.saveToLibraryBtn.disabled = true;
 
-      if (window.performTraceSafe) {
-        window.performTraceSafe();
-      }
+      import('./tracer.js').then(m => m.performTraceSafe()).catch(console.error);
     };
     img.onerror = () => {
       alert('Failed to load image: ' + (displayName || url));
