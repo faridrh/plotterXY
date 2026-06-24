@@ -37,6 +37,12 @@
     <button id="resetParamsBtn" type="button">Reset defaults</button>
   </div>
 
+  <label class="facemesh-toggle">
+    <input type="checkbox" id="useFaceMesh"> 
+    <strong>Use MediaPipe FaceMesh</strong> — detect clean face lines (great for selfies)
+  </label>
+  <div class="facemesh-hint">When enabled, the photo is first converted to face contours using MediaPipe, then traced.</div>
+
   <div class="preset-buttons">
     <span>Quick presets:</span>
     <button data-preset="simple" type="button">Simple</button>
