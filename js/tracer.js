@@ -1,14 +1,14 @@
 // js/tracer.js
 // Handles image tracing logic (both normal ImageTracer and FaceMesh path)
 
-import { setBezierSteps } from './config.js';
+import { setBezierSteps, CANVAS_SIZE } from './config.js';
 import { dom } from './dom.js';
 import { state } from './state.js';
 import { SvgParser } from './svgParser.js';
 import { PlotterSimulator } from './plotterSimulator.js';
 import { enableSimulationControls } from './library.js';
 import { getCurrentParams } from './tuning.js';
-import { processWithFaceMesh } from './faceMesh.js';
+import { buildFacePathsFromLandmarks, pathsToSVG, detectFaceLandmarks } from './faceMesh.js';
 
 export function buildTraceOptions() {
   const p = getCurrentParams();
@@ -32,40 +32,21 @@ export async function performTrace() {
 
   if (useFaceMesh) {
     try {
-      const processedDataUrl = await processWithFaceMesh();
+      const landmarks = await detectFaceLandmarks(dom.inputCanvas);
 
-      const traceOpts = buildTraceOptions();
-      const params = getCurrentParams();
+      // Build paths DIRECTLY from landmarks (exact face features from the selfie)
+      // This ensures the lines accurately represent the uploaded face, without raster artifacts from ImageTracer.
+      let facePaths = buildFacePathsFromLandmarks(landmarks);
 
-      // For FaceMesh we want to preserve the clean lines, so use more permissive settings
-      // (lower pathomit, lower simplification) than the "Simple" photo preset.
-      const faceMeshParams = {
-        ...params,
-        pathomit: Math.min(params.pathomit, 5),
-        simplifyTolerance: Math.min(params.simplifyTolerance, 0.5),
-        minLength: Math.min(params.minLength, 2),
-        minPoints: Math.min(params.minPoints, 2),
-      };
+      // Normalize to canvas (same as other paths)
+      SvgParser.normalizePaths(facePaths, CANVAS_SIZE, CANVAS_SIZE);
 
-      setBezierSteps(faceMeshParams.bezierSteps || 10);
+      // Show clean direct SVG preview
+      dom.svgContainer.innerHTML = pathsToSVG(facePaths);
 
-      ImageTracer.imageToSVG(
-        processedDataUrl,
-        (svg) => {
-          dom.svgContainer.innerHTML = svg;
-          const postOpts = {
-            bezierSteps: faceMeshParams.bezierSteps,
-            simplifyTolerance: faceMeshParams.simplifyTolerance,
-            minPoints: faceMeshParams.minPoints,
-            minLength: faceMeshParams.minLength,
-            sortByLength: faceMeshParams.sortByLength,
-          };
-          state.pathsPoints = SvgParser.extractPaths(svg, postOpts);
-          PlotterSimulator.reset();
-          enableSimulationControls();
-        },
-        traceOpts
-      );
+      state.pathsPoints = facePaths;
+      PlotterSimulator.reset();
+      enableSimulationControls();
       return;
     } catch (err) {
       console.warn('FaceMesh processing failed, falling back to normal tracing:', err);
